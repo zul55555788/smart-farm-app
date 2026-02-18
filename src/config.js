@@ -1,0 +1,2 @@
+export const apiKey = "AIzaSyA8-vCN51-sW7f4uQK5gGe5RCyZzw6eWlE"; 
+export const SHEET_API_URL = "https://script.google.com/macros/s/AKfycbwdRwZMFi9deya8EkEXsPyVbBb93ofqU9q64KhCd7m2nZHtkjhX1phIuyhyQHlHMei3CQ/exec";
