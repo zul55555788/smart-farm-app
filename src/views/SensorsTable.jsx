@@ -121,7 +121,7 @@ const SensorsTable = ({ historyData }) => {
               <tr>
                  <td colSpan="10" className="p-12 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
                     <Database size={32} className="opacity-20"/>
-                    <span>ไม่พบข้อมูลย้อนหลัง</span>
+                    <tr><td colSpan="10" className="p-8 text-center text-slate-400">กำลังโหลดข้อมูล... หรือไม่มีข้อมูลย้อนหลัง</td></tr>
                  </td>
               </tr>
             )}
