@@ -39,13 +39,13 @@ const AddRuleModal = ({ isOpen, onClose, onSubmit, devices, newRule, setNewRule 
               <label className="block text-sm font-medium text-slate-600 mb-2">สั่งงาน (THEN)</label>
               <select value={newRule.actionDevice} onChange={(e) => setNewRule({...newRule, actionDevice: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-emerald-500 focus:outline-none text-sm">
                 {devices.map(d => (<option key={d.id} value={d.id}>{d.name}</option>))}
-                <option value="notify">แจ้งเตือน Line</option>
+                
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-600 mb-2">สถานะ (Action)</label>
               <select value={newRule.actionState} onChange={(e) => setNewRule({...newRule, actionState: e.target.value})} className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:border-emerald-500 focus:outline-none text-sm">
-                <option value="true">เปิด (ON)</option><option value="false">ปิด (OFF)</option><option value="notify">ส่งข้อความ</option>
+                <option value="true">เปิด (ON)</option><option value="false">ปิด (OFF)</option>
               </select>
             </div>
           </div>
