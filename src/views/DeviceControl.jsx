@@ -1,5 +1,5 @@
 import React from 'react';
-import { Droplets, Wind, FlaskConical, Zap, AlertTriangle, Clock, Timer } from 'lucide-react';
+import { Droplets, Wind, FlaskConical, Zap, AlertTriangle, Clock, Timer, XCircle } from 'lucide-react';
 
 const DeviceControl = ({ devices, handleDeviceClick, cancelSchedule }) => {
   return (
@@ -27,8 +27,22 @@ const DeviceControl = ({ devices, handleDeviceClick, cancelSchedule }) => {
               </div>
             </div>
             <div className="flex justify-between items-end mb-6">
-                <div><h3 className="text-lg font-bold text-slate-800 mb-1">{device.name}</h3><p className="text-sm text-slate-400">Last: {device.lastActive}</p></div>
-                {device.schedule && (<button onClick={(e) => { e.stopPropagation(); cancelSchedule(device.id); }} className="text-xs text-red-400 hover:text-red-600 underline">ยกเลิกเวลา</button>)}
+                <div>
+                    <h3 className="text-lg font-bold text-slate-800 mb-1">{device.name}</h3>
+                    <p className="text-sm text-slate-400">Last: {device.lastActive}</p>
+                </div>
+                
+                {/* 🔴 ส่วนที่ปรับปรุงปุ่มยกเลิกเวลาให้สวยขึ้น */}
+                {device.schedule && (
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); cancelSchedule(device.id); }} 
+                        className="flex items-center gap-1.5 text-xs font-bold text-rose-500 bg-rose-50 px-3 py-1.5 rounded-full border border-rose-200 hover:bg-rose-500 hover:text-white hover:border-rose-500 transition-all shadow-sm active:scale-95"
+                    >
+                        <XCircle size={14} />
+                        ยกเลิกเวลา
+                    </button>
+                )}
+                
             </div>
             <button onClick={() => handleDeviceClick(device)} className={`w-full py-3 rounded-xl font-bold transition-all shadow-md active:scale-95 flex items-center justify-center gap-2 ${device.status ? 'bg-emerald-500 text-white shadow-emerald-200 hover:bg-emerald-600' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}>
                 {device.status ? 'ปิดการทำงาน (OFF)' : (<><Timer size={18} /><span>ตั้งเวลา / เปิดทำงาน</span></>)}

@@ -43,6 +43,9 @@ const SmartFarmPro = () => {
   const [toasts, setToasts] = useState([]);
   const [schedules, setSchedules] = useState([]); 
   
+  // 🟢 State สำหรับเก็บคิวงานตั้งเวลาของระบบนาฬิกา
+  const [scheduledTasks, setScheduledTasks] = useState([]);
+  
   // 3️⃣ UI States
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [selectedDeviceForTimer, setSelectedDeviceForTimer] = useState(null);
@@ -187,6 +190,98 @@ const SmartFarmPro = () => {
     checkAutomation();
   }, [sensorData, rules, devices, isLoggedIn]);
 
+  // ---------------------------------------------------------
+  // ⏰ ระบบนาฬิกาคอยเช็คเวลาอัตโนมัติ (รันทุกๆ 1 วินาที)
+  // ---------------------------------------------------------
+  useEffect(() => {
+    if (!isLoggedIn) return; // ไม่ทำงานถ้ายังไม่ล็อกอิน
+
+    const clock = setInterval(() => {
+      const now = new Date();
+      const currentTime = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }); 
+      const currentDay = now.getDay(); 
+
+      setScheduledTasks(prevTasks => {
+        let isUpdated = false;
+        
+        const newTasks = prevTasks.filter(task => {
+          
+          // โหมด 1: นับถอยหลัง (Timer) ปิดอุปกรณ์
+          if (task.timerMode === 'timer') {
+            if (now.getTime() >= task.executeAtTime) {
+              console.log(`⏰ ถึงเวลา! สั่งงาน: ${task.deviceId} -> ${task.action}`);
+              
+              sendControlToAPI(task.deviceId, task.action === 'ON', 'auto', 0);
+              addSystemLog(`ครบเวลาที่ตั้งไว้: สั่ง ${task.action === 'ON' ? 'เปิด' : 'ปิด'} ${getDeviceName(task.deviceId)} อัตโนมัติ`, 'warning');
+              
+              return false; // ทำเสร็จแล้ว ลบออก
+            }
+            return true;
+          }
+
+          // โหมด 2: ตั้งเวลา (Schedule) เปิดอุปกรณ์
+          if (task.timerMode === 'schedule') {
+            const isToday = task.config.repeatMode === 'everyday' || 
+                            (task.config.repeatMode === 'custom' && task.config.selectedDays.includes(currentDay)) ||
+                            task.config.repeatMode === 'once';
+
+            if (isToday) {
+              task.config.timeSlots.forEach(slot => {
+                // เช็คว่าถึงเวลาที่ตั้งไว้พอดี และยังไม่ได้ส่งคำสั่ง
+                if (slot.active && slot.time === currentTime && !slot.hasExecuted) {
+                  console.log(`⏰ ถึงเวลา! สั่งงาน: ${task.deviceId} -> ${task.action}`);
+                  
+                  // สั่งเปิดเครื่อง
+                  sendControlToAPI(task.deviceId, true, 'auto', task.config.durationVal);
+                  addSystemLog(`⏰ ระบบตั้งเวลาอัตโนมัติ: สั่งเปิด ${getDeviceName(task.deviceId)}`, 'info');
+                  
+                  // คำนวณเวลาปิด แล้วเพิ่มคิวลงไปแบบโหมด 1
+                  let durationMs = task.config.durationVal * 1000;
+                  if (task.config.durationUnit === 'minutes') durationMs *= 60;
+                  if (task.config.durationUnit === 'hours') durationMs *= 3600;
+
+                  // แทรกคิวสั่งปิดแบบเงียบๆ
+                  setTimeout(() => {
+                     setScheduledTasks(current => [...current, {
+                        id: Date.now(),
+                        deviceId: task.deviceId,
+                        timerMode: 'timer',
+                        executeAtTime: new Date().getTime() + durationMs,
+                        action: 'OFF'
+                     }]);
+                  }, 500);
+                  
+                  slot.hasExecuted = true; 
+                  isUpdated = true;
+                }
+              });
+
+              // ปลดล็อคเมื่อผ่านนาทีนั้นไปแล้ว
+              task.config.timeSlots.forEach(slot => {
+                if (slot.time !== currentTime && slot.hasExecuted) {
+                  slot.hasExecuted = false;
+                  isUpdated = true;
+                }
+              });
+            }
+
+            // ถ้าเป็นโหมดครั้งเดียว และทำเสร็จหมดแล้ว ให้ลบทิ้ง
+            if (task.config.repeatMode === 'once' && task.config.timeSlots.every(s => !s.active || s.hasExecuted)) {
+               return false; 
+            }
+            return true;
+          }
+          return true;
+        });
+
+        return isUpdated || newTasks.length !== prevTasks.length ? newTasks : prevTasks;
+      });
+
+    }, 1000); 
+
+    return () => clearInterval(clock);
+  }, [isLoggedIn, devices]);
+
   // --- Handlers ---
   const handleDeviceClick = (device) => {
     if (device.status) {
@@ -201,6 +296,7 @@ const SmartFarmPro = () => {
     }
   };
 
+  // 🟢 ฟังก์ชันนี้ถูกแก้ไขเพื่อรองรับระบบนาฬิกา
   const confirmTimerSettings = () => {
     if (!selectedDeviceForTimer) return;
     const val = parseInt(scheduleConfig.durationVal);
@@ -208,37 +304,58 @@ const SmartFarmPro = () => {
     let unitLabel = scheduleConfig.durationUnit === 'seconds' ? 'วินาที' : scheduleConfig.durationUnit === 'minutes' ? 'นาที' : 'ชั่วโมง';
     
     if (timerMode === 'timer') {
+        // --- 1. โหมดสั่งเปิดทันที และนับถอยหลังปิด ---
         let durationMs = val * 1000;
         if (scheduleConfig.durationUnit === 'minutes') durationMs *= 60;
         if (scheduleConfig.durationUnit === 'hours') durationMs *= 3600;
+
+        const executeAtTime = new Date().getTime() + durationMs;
 
         setDevices(prev => prev.map(d => d.id === selectedDeviceForTimer.id ? { ...d, status: true } : d));
         addSystemLog(`สั่งเปิด ${selectedDeviceForTimer.name} เป็นเวลา ${val} ${unitLabel}`, 'success');
         sendControlToAPI(selectedDeviceForTimer.id, true, 'manual', val); 
 
-        setTimeout(() => {
-            setDevices(prev => prev.map(d => {
-                if (d.id === selectedDeviceForTimer.id && d.status) {
-                    addSystemLog(`ครบเวลา: ปิด ${d.name} อัตโนมัติ`, 'warning');
-                    sendControlToAPI(d.id, false); 
-                    return { ...d, status: false };
-                } return d;
-            }));
-        }, durationMs);
+        // โยนคิวสั่ง "ปิด" เข้าไปในระบบนาฬิกา
+        setScheduledTasks(prev => [...prev, {
+          id: Date.now(),
+          deviceId: selectedDeviceForTimer.id,
+          timerMode: 'timer',
+          executeAtTime: executeAtTime,
+          action: 'OFF'
+        }]);
+
     } else {
+        // --- 2. โหมดตั้งเวลาล่วงหน้า (Schedule) ---
         const newSchedule = { id: Date.now(), deviceId: selectedDeviceForTimer.id, config: { ...scheduleConfig } };
+        
+        // เซฟลง UI ให้เห็นว่าตั้งเวลาไว้แล้ว
         setSchedules(prev => [...prev.filter(s => s.deviceId !== selectedDeviceForTimer.id), newSchedule]);
         const activeSlots = scheduleConfig.timeSlots.filter(s => s.active).length;
         setDevices(prev => prev.map(d => d.id === selectedDeviceForTimer.id ? { ...d, schedule: `${activeSlots} เวลา` } : d));
         addSystemLog(`ตั้งเวลา ${selectedDeviceForTimer.name} เรียบร้อย`, 'info');
+
+        // โยนคิวสั่ง "เปิด" เข้าไปในระบบนาฬิกา
+        setScheduledTasks(prev => [...prev, {
+          id: Date.now(),
+          deviceId: selectedDeviceForTimer.id,
+          timerMode: 'schedule',
+          config: JSON.parse(JSON.stringify(scheduleConfig)), 
+          action: 'ON'
+        }]);
     }
+    
     setShowTimerModal(false);
     setSelectedDeviceForTimer(null);
   };
 
+  // 🟢 ฟังก์ชันยกเลิกคิวงาน
   const cancelSchedule = (deviceId) => { 
     setSchedules(prev => prev.filter(s => s.deviceId !== deviceId)); 
     setDevices(prev => prev.map(d => d.id === deviceId ? { ...d, schedule: null } : d)); 
+    
+    // เคลียร์ออกจากคิวระบบนาฬิกาด้วย
+    setScheduledTasks(prev => prev.filter(t => t.deviceId !== deviceId));
+    
     addSystemLog(`ยกเลิกการตั้งเวลาของ ${getDeviceName(deviceId)}`, 'warning'); 
   };
 
@@ -317,7 +434,6 @@ const SmartFarmPro = () => {
     const parts = [{ text: farmContext + "\n\nUser Question: " + (prompt || "Analyze Farm Status") }];
     if (imageBase64) parts.push({ inline_data: { mime_type: imageMimeType || "image/jpeg", data: imageBase64 } });
 
-    // ✅ อัปเดตรายชื่อโมเดลตามข้อมูลใหม่ (Gemini 2.5 & 3)
     const modelList = [
         "gemini-2.5-flash",        // รุ่น Stable (แนะนำ)
         "gemini-2.0-flash",        // รุ่นรอง (ใช้ได้ถึง มี.ค. 2026)
@@ -328,12 +444,9 @@ const SmartFarmPro = () => {
     let success = false;
     let finalError = "";
 
-    // 🔄 ระบบ Auto-Fallback: ลองทีละตัวจนกว่าจะติด
     for (const model of modelList) {
         try {
             console.log(`🤖 Trying AI Model: ${model}...`);
-            
-            // ใช้ v1beta เพื่อรองรับโมเดลใหม่ๆ
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`, { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' }, 
@@ -342,7 +455,6 @@ const SmartFarmPro = () => {
 
             if (!res.ok) {
                 const errData = await res.json().catch(()=>({}));
-                // ถ้าเป็น 404 (หาไม่เจอ) ให้ข้ามไปตัวถัดไปเงียบๆ
                 if (res.status === 404) throw new Error(`Model ${model} not found`);
                 throw new Error(errData.error?.message || `HTTP ${res.status}`);
             }
@@ -354,7 +466,7 @@ const SmartFarmPro = () => {
                 const msg = { role: 'model', text: aiResponse };
                 setAiChatHistory(prev => isAnalysis ? [...prev, { role: 'user', text: '⚡ วิเคราะห์สุขภาพฟาร์ม' }, msg] : [...prev, msg]);
                 success = true;
-                break; // เจอตัวที่ใช้ได้แล้ว จบการทำงานทันที
+                break; 
             }
         } catch (e) {
             console.warn(`❌ Model ${model} failed:`, e.message);
