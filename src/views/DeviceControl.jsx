@@ -29,7 +29,7 @@ const DeviceControl = ({ devices, handleDeviceClick, cancelSchedule }) => {
             <div className="flex justify-between items-end mb-6">
                 <div>
                     <h3 className="text-lg font-bold text-slate-800 mb-1">{device.name}</h3>
-                    <p className="text-sm text-slate-400">Last: {device.lastActive}</p>
+                    <p className="text-sm text-slate-400"> </p>
                 </div>
                 
                 {/* 🔴 ส่วนที่ปรับปรุงปุ่มยกเลิกเวลาให้สวยขึ้น */}
